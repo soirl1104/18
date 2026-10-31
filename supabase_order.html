@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>全班即時午餐點餐系統</title>
+  <meta name="description" content="全班即時雲端午餐點餐系統，使用 Supabase Realtime 技術，免重整即時同步所有人訂單。">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#030712;--card:rgba(10,18,35,0.92);--input:rgba(4,10,22,0.95);--b0:rgba(30,58,100,0.6);--b1:rgba(56,189,248,0.7);--t1:#e2e8f0;--t2:#94a3b8;--tm:#475569;--cyan:#22d3ee;--blue:#3b82f6;--indigo:#6366f1;--green:#10b981;--rose:#f43f5e;}
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html{scroll-behavior:smooth}
+    body{font-family:'Inter','Noto Sans TC',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;min-height:100dvh;overflow-x:hidden;background-image:radial-gradient(ellipse at 15% 30%,rgba(59,130,246,0.07) 0%,transparent 50%),radial-gradient(ellipse at 85% 70%,rgba(99,102,241,0.07) 0%,transparent 50%),radial-gradient(ellipse at 50% 0%,rgba(34,211,238,0.05) 0%,transparent 40%)}
+    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(34,211,238,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+    .wrap{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;padding:16px 12px 40px;gap:16px;max-width:840px;margin:0 auto}
+    .card{background:var(--card);border:1px solid var(--b0);border-radius:20px;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:0 0 0 1px rgba(255,255,255,0.03) inset,0 4px 24px rgba(0,0,0,0.5),0 1px 0 rgba(255,255,255,0.05) inset;width:100%}
+    /* HEADER */
+    .hdr{padding:18px 20px;position:relative;overflow:hidden}
+    .hdr::after{content:'';position:absolute;bottom:0;left:20px;right:20px;height:1px;background:linear-gradient(90deg,transparent,var(--b1),transparent)}
+    .hdr-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .brand{display:flex;flex-direction:column;gap:4px}
+    .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.25);border-radius:100px;padding:3px 10px;font-size:11px;color:#fbbf24;font-weight:600;width:fit-content;transition:all 0.3s}
+    .badge.online{background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.25);color:#10b981}
+    .badge.offline{background:rgba(244,63,94,0.1);border-color:rgba(244,63,94,0.25);color:#f43f5e}
+    .dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pd 2s infinite}
+    @keyframes pd{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+    .title{font-size:22px;font-weight:900;background:linear-gradient(135deg,var(--cyan) 0%,#60a5fa 50%,var(--indigo) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.5px;line-height:1.2}
+    .stats{display:flex;gap:16px;background:rgba(4,10,22,0.7);border:1px solid var(--b0);border-radius:14px;padding:10px 16px}
+    .si{display:flex;flex-direction:column;gap:1px}
+    .sl{font-size:10px;color:var(--tm);letter-spacing:.5px;text-transform:uppercase}
+    .sv{font-size:16px;font-weight:800;letter-spacing:-.5px}
+    .sv.cy{color:var(--cyan)}.sv.gr{color:var(--green)}
+    .sdiv{width:1px;background:var(--b0);align-self:stretch}
+    /* COUNTDOWN */
+    .cd-bar{padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:linear-gradient(90deg,rgba(244,63,94,0.08),rgba(251,191,36,0.08));border-top:1px solid rgba(244,63,94,0.12)}
+    .cd-label{font-size:11px;color:var(--tm)}
+    .cd-time{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:1px;color:#fbbf24}
+    .cd-time.urgent{color:var(--rose);animation:blink 1s infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+    /* FORM */
+    .fbody{padding:20px}
+    .sh{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px}
+    .fg{display:flex;flex-direction:column;gap:14px;margin-bottom:20px}
+    .fl{display:block;font-size:11px;font-weight:600;color:var(--tm);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+    .fl .req{color:var(--rose)}
+    .fi,.fsel{width:100%;background:var(--input);border:1.5px solid var(--b0);border-radius:12px;padding:13px 16px;font-size:15px;font-family:inherit;color:var(--t1);outline:none;transition:border-color .2s,box-shadow .2s;-webkit-appearance:none;appearance:none}
+    .fi::placeholder{color:var(--tm);font-size:14px}
+    .fi:focus,.fsel:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(34,211,238,.12),0 0 20px rgba(34,211,238,.06)}
+    .fsel{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:18px;padding-right:36px;cursor:pointer}
+    .fsel option{background:#0a1223}
+    /* BUTTON SHIMMER */
+    .sbtn{width:100%;position:relative;overflow:hidden;background:linear-gradient(135deg,#06b6d4 0%,#3b82f6 50%,#6366f1 100%);border:none;border-radius:14px;padding:16px 24px;font-size:16px;font-weight:800;font-family:inherit;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;letter-spacing:.5px;transition:transform .15s,box-shadow .3s;box-shadow:0 4px 20px rgba(59,130,246,.4),0 1px 0 rgba(255,255,255,.15) inset;-webkit-tap-highlight-color:transparent}
+    .sbtn::before{content:'';position:absolute;top:-50%;left:-60%;width:40%;height:200%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);transform:skewX(-20deg);animation:shimmer 3s infinite}
+    @keyframes shimmer{0%{left:-60%}100%{left:120%}}
+    .sbtn:hover{transform:translateY(-1px);box-shadow:0 6px 28px rgba(59,130,246,.55),0 1px 0 rgba(255,255,255,.15) inset}
+    .sbtn:active{transform:scale(.97);box-shadow:0 2px 10px rgba(59,130,246,.3)}
+    .sbtn:disabled{opacity:.65;cursor:not-allowed;transform:none}
+    .sbtn:disabled::before{animation:none}
+    /* ORDERS */
+    .oh{padding:16px 20px;border-bottom:1px solid var(--b0);display:flex;align-items:center;justify-content:space-between}
+    .ob{background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.2);border-radius:100px;padding:3px 12px;font-size:12px;font-weight:700;color:var(--cyan)}
+    .ol{padding:12px;display:flex;flex-direction:column;gap:8px;max-height:480px;overflow-y:auto;overscroll-behavior:contain}
+    .ol::-webkit-scrollbar{width:4px}
+    .ol::-webkit-scrollbar-thumb{background:var(--b0);border-radius:99px}
+    .oc{background:rgba(4,10,22,.7);border:1px solid var(--b0);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:12px;transition:border-color .2s,box-shadow .2s;animation:ci .3s cubic-bezier(.16,1,.3,1) forwards}
+    @keyframes ci{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
+    .oc:hover{border-color:rgba(56,189,248,.3);box-shadow:0 0 16px rgba(34,211,238,.06)}
+    .oc.new{border-color:rgba(34,211,238,.5);box-shadow:0 0 20px rgba(34,211,238,.15)}
+    .av{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,rgba(34,211,238,.15),rgba(99,102,241,.15));border:1px solid rgba(34,211,238,.2);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+    .oi{flex:1;min-width:0}
+    .onr{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+    .on{font-size:14px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ot{font-size:11px;color:var(--tm);font-variant-numeric:tabular-nums;flex-shrink:0}
+    .tags{display:flex;flex-wrap:wrap;gap:5px}
+    .tm-tag{background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2);border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600;color:var(--cyan);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+    .pr-tag{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;color:var(--green);flex-shrink:0}
+    .nt-tag{font-size:11px;color:var(--tm);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+    .dbtn{background:none;border:1px solid transparent;border-radius:10px;padding:8px;cursor:pointer;color:var(--tm);font-size:14px;transition:color .2s,background .2s,border-color .2s;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+    .dbtn:hover{color:var(--rose);background:rgba(244,63,94,.1);border-color:rgba(244,63,94,.2)}
+    .dbtn:active{transform:scale(.9)}
+    .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;color:var(--tm);text-align:center;gap:8px}
+    .empty .ico{font-size:40px;margin-bottom:4px;opacity:.6}
+    .empty .txt{font-size:14px;line-height:1.6}
+    .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;gap:12px;color:var(--tm)}
+    .spin{width:28px;height:28px;border:2.5px solid var(--b0);border-top-color:var(--cyan);border-radius:50%;animation:sp .8s linear infinite}
+    @keyframes sp{to{transform:rotate(360deg)}}
+    /* TOAST */
+    #tc{position:fixed;top:16px;left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:400px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+    .toast{background:rgba(8,15,30,.96);border:1px solid rgba(34,211,238,.35);border-radius:14px;padding:12px 16px;display:flex;align-items:flex-start;gap:10px;box-shadow:0 4px 30px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04) inset,0 0 20px rgba(34,211,238,.08);animation:ti .35s cubic-bezier(.16,1,.3,1) forwards;pointer-events:auto;backdrop-filter:blur(20px)}
+    .toast.danger{border-color:rgba(244,63,94,.35);box-shadow:0 4px 30px rgba(0,0,0,.6),0 0 20px rgba(244,63,94,.08)}
+    .toast.warning{border-color:rgba(251,191,36,.35)}
+    @keyframes ti{from{opacity:0;transform:translateY(-12px) scale(.95)}to{opacity:1;transform:none}}
+    .ti-ico{font-size:20px;flex-shrink:0;margin-top:1px}
+    .ti-ttl{font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px}
+    .ti-msg{font-size:12px;color:var(--t2)}
+    /* MODAL */
+    .mo{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:8888;display:flex;align-items:flex-end;padding:16px;opacity:0;transition:opacity .25s;pointer-events:none}
+    .mo.open{opacity:1;pointer-events:auto}
+    .mb{width:100%;max-width:420px;margin:0 auto;background:rgba(10,18,35,.98);border:1px solid var(--b0);border-radius:20px;padding:24px 20px;box-shadow:0 -4px 40px rgba(0,0,0,.5);transform:translateY(20px);transition:transform .3s cubic-bezier(.16,1,.3,1)}
+    .mo.open .mb{transform:translateY(0)}
+    .mt{font-size:16px;font-weight:800;color:var(--t1);margin-bottom:6px}
+    .mm{font-size:13px;color:var(--t2);margin-bottom:20px;line-height:1.5}
+    .ma{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .mc{padding:12px;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;background:rgba(255,255,255,.05);border:1px solid var(--b0);color:var(--t2);cursor:pointer}
+    .mc:hover{background:rgba(255,255,255,.08)}
+    .mok{padding:12px;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;background:linear-gradient(135deg,var(--rose),#dc2626);border:none;color:#fff;cursor:pointer;box-shadow:0 2px 12px rgba(244,63,94,.3)}
+    .mok:hover{opacity:.9}
+    .fn{text-align:center;font-size:11px;color:var(--tm);padding:12px 20px;line-height:1.6}
+    @media(min-width:640px){.wrap{padding:24px 20px 40px;gap:20px}.title{font-size:26px}.ol{max-height:600px}}
+    @media(min-width:1024px){#mg{display:grid!important;grid-template-columns:1fr 1.4fr!important;flex-direction:unset!important}}
+  </style>
+</head>
+<body>
+  <div id="tc"></div>
+  <div id="modal" class="mo" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="mb">
+      <div class="mt" id="mt">確認取消點餐</div>
+      <div class="mm" id="mm"></div>
+      <div class="ma">
+        <button class="mc" onclick="closeModal(false)">返回</button>
+        <button class="mok" onclick="closeModal(true)">確定刪除</button>
+      </div>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="card">
+      <div class="hdr">
+        <div class="hdr-row">
+          <div class="brand">
+            <div class="badge" id="badge"><span class="dot"></span><span id="btext">正在連接雲端...</span></div>
+            <h1 class="title">🍱 全班即時午餐點餐系統</h1>
+          </div>
+          <div class="stats">
+            <div class="si"><span class="sl">已訂</span><span class="sv cy" id="stat-count">0 份</span></div>
+            <div class="sdiv"></div>
+            <div class="si"><span class="sl">合計</span><span class="sv gr" id="stat-total">$0 元</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="cd-bar">
+        <span class="cd-label">⏰ 截止時間 13:00 自動清除所有訂單</span>
+        <span class="cd-time" id="cd">--:--</span>
+      </div>
+    </div>
+    <div id="mg" style="width:100%;display:flex;flex-direction:column;gap:16px">
+      <div class="card">
+        <div class="fbody">
+          <div class="sh">✍️ 填寫點餐資料</div>
+          <form id="order-form" onsubmit="sub(event)">
+            <div class="fg">
+              <div>
+                <label class="fl" for="un">座號 / 姓名 <span class="req">*</span></label>
+                <input type="text" id="un" class="fi" placeholder="例如：5號 小明" required autocomplete="off">
+              </div>
+              <div>
+                <label class="fl" for="ms">快速選擇</label>
+                <select id="ms" class="fsel" onchange="selMeal(this)">
+                  <option value="" data-price="0">── 常用餐點 ──</option>
+                  <option value="涼麵" data-price="50">🍜 涼麵 ($50)</option>
+                  <option value="滷肉飯" data-price="50">🍚 滷肉飯 ($50)</option>
+                  <option value="麻辣燙（附白飯）" data-price="80">🍲 麻辣燙 ($80)</option>
+                  <option value="沙茶豬肉鍋（附白飯）" data-price="90">🍲 沙茶豬肉鍋 ($90)</option>
+                  <option value="咖哩雞排飯" data-price="80">🍛 咖哩雞排飯 ($80)</option>
+                  <option value="便當（無骨雞）" data-price="80">🍱 便當（無骨雞）($80)</option>
+                  <option value="便當（椒麻雞）" data-price="80">🍱 便當（椒麻雞）($80)</option>
+                  <option value="便當（日式豬）" data-price="80">🍱 便當（日式豬）($80)</option>
+                  <option value="自訂餐點" data-price="0">✏️ 其他（自行輸入）</option>
+                </select>
+              </div>
+              <div>
+                <label class="fl" for="mn">餐點名稱 <span class="req">*</span></label>
+                <input type="text" id="mn" class="fi" placeholder="例如：雞排飯" required autocomplete="off">
+              </div>
+              <div>
+                <label class="fl" for="mp">金額（元）<span class="req">*</span></label>
+                <input type="number" id="mp" class="fi" placeholder="80" min="0" step="1" required>
+              </div>
+              <div>
+                <label class="fl" for="nt">備註（選填）</label>
+                <input type="text" id="nt" class="fi" placeholder="例如：飯少、大辣、不要酸菜" autocomplete="off">
+              </div>
+            </div>
+            <button type="submit" class="sbtn" id="sbtn">
+              <span id="bico">🚀</span><span id="btxt">確認送出訂單</span>
+            </button>
+          </form>
+        </div>
+        <div class="fn">💡 送出後全班手機 / 電腦即時同步，免重新整理</div>
+      </div>
+      <div class="card">
+        <div class="oh">
+          <div class="sh" style="margin-bottom:0">📋 全班即時訂單</div>
+          <span class="ob" id="ob">共 0 筆</span>
+        </div>
+        <div class="ol" id="ol">
+          <div class="loading"><div class="spin"></div><span style="font-size:13px">正在載入雲端資料...</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // ⚠️ 請填入你的 Supabase 專案資訊
+    const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+    const { createClient } = window.supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let orders = [], modalRes = null, cdDone = false;
+
+    // 音效
+    function chime(t='new'){
+      try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.type='sine';o.connect(g);g.connect(c.destination);
+      if(t==='new'){o.frequency.setValueAtTime(660,c.currentTime);o.frequency.exponentialRampToValueAtTime(880,c.currentTime+.12);g.gain.setValueAtTime(.18,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.4);o.start();o.stop(c.currentTime+.4);}
+      else{o.frequency.setValueAtTime(440,c.currentTime);o.frequency.exponentialRampToValueAtTime(300,c.currentTime+.15);g.gain.setValueAtTime(.12,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.3);o.start();o.stop(c.currentTime+.3);}
+      }catch(e){}}
+
+    // Toast
+    function toast(ico,ttl,msg,type=''){
+      const c=document.getElementById('tc'),e=document.createElement('div');
+      e.className='toast'+(type?' '+type:'');
+      e.innerHTML=`<span class="ti-ico">${ico}</span><div><div class="ti-ttl">${ttl}</div><div class="ti-msg">${msg}</div></div>`;
+      c.prepend(e);
+      setTimeout(()=>{e.style.transition='opacity .3s,transform .3s';e.style.opacity='0';e.style.transform='translateY(-8px)';setTimeout(()=>e.remove(),320);},4000);
+    }
+
+    // Modal
+    function showModal(t,m){return new Promise(r=>{modalRes=r;document.getElementById('mt').textContent=t;document.getElementById('mm').textContent=m;const o=document.getElementById('modal');o.setAttribute('aria-hidden','false');o.classList.add('open');})}
+    function closeModal(r){const o=document.getElementById('modal');o.classList.remove('open');o.setAttribute('aria-hidden','true');if(modalRes){modalRes(r);modalRes=null;}}
+    document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal(false);});
+
+    // Countdown
+    function tick(){
+      const now=new Date(),dl=new Date(now);dl.setHours(13,0,0,0);
+      const diff=dl-now,el=document.getElementById('cd');
+      if(diff<=0){el.textContent='已截止';el.classList.add('urgent');if(!cdDone){cdDone=true;autoCancel();}return;}
+      const s=Math.floor(diff/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60,p=n=>String(n).padStart(2,'0');
+      el.textContent=h>0?`${h}:${p(m)}:${p(sec)}`:`${p(m)}:${p(sec)}`;
+      el.classList.toggle('urgent',diff<5*60*1000);
+    }
+    async function autoCancel(){
+      if(!orders.length)return;
+      toast('⏰','13:00 截止！','正在自動清除所有訂單...','warning');
+      try{const ids=orders.map(o=>o.id);const{error}=await db.from('orders').delete().in('id',ids);if(error)throw error;toast('🗑️','訂單全數清除',`共清除 ${ids.length} 筆（13:00 截止）`,'warning');}
+      catch(e){toast('⚠️','自動取消失敗',e.message,'danger');}
+    }
+
+    // Utils
+    function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
+    const emap={'涼麵':'🍜','滷肉飯':'🍚','麻辣燙':'🍲','沙茶豬肉鍋':'🍲','咖哩雞排飯':'🍛','便當':'🍱'};
+    function emoji(m){for(const[k,v]of Object.entries(emap)){if(m&&m.includes(k))return v;}return'🍽️';}
+
+    // Render
+    function render(hid=null){
+      const list=document.getElementById('ol'),n=orders.length,tot=orders.reduce((s,o)=>s+Number(o.price||0),0);
+      document.getElementById('stat-count').textContent=`${n} 份`;
+      document.getElementById('stat-total').textContent=`$${tot} 元`;
+      document.getElementById('ob').textContent=`共 ${n} 筆`;
+      if(!n){list.innerHTML='<div class="empty"><div class="ico">🍽️</div><div class="txt">目前還沒有任何點餐紀錄<br>成為今天第一個點餐的人吧！</div></div>';return;}
+      const sorted=[...orders].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+      list.innerHTML=sorted.map(o=>{
+        const ts=o.created_at?new Date(o.created_at).toLocaleString('zh-TW',{hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'--:--';
+        const isN=String(o.id)===String(hid);
+        return`<div class="oc${isN?' new':''}" id="o-${esc(String(o.id))}">
+          <div class="av">${emoji(o.meal)}</div>
+          <div class="oi">
+            <div class="onr"><span class="on">${esc(o.name)}</span><span class="ot">${ts}</span></div>
+            <div class="tags">
+              <span class="tm-tag" title="${esc(o.meal)}">${esc(o.meal)}</span>
+              <span class="pr-tag">$${Number(o.price||0)}</span>
+              ${o.note?`<span class="nt-tag" title="${esc(o.note)}">📝 ${esc(o.note)}</span>`:''}
+            </div>
+          </div>
+          <button class="dbtn" type="button" onclick="del('${esc(String(o.id))}','${esc(o.name)}')" title="取消點餐">🗑️</button>
+        </div>`;
+      }).join('');
+      if(hid)setTimeout(()=>{const e=document.getElementById(`o-${hid}`);if(e)e.classList.remove('new');},3000);
+    }
+
+    // Meal select
+    function selMeal(s){const o=s.options[s.selectedIndex],mn=document.getElementById('mn'),mp=document.getElementById('mp');
+      if(!s.value||s.value==='自訂餐點'){mn.value='';mp.value='';mn.focus();}else{mn.value=s.value;mp.value=o.dataset.price||'';}}
+
+    // Status
+    function setStatus(st){
+      const b=document.getElementById('badge'),t=document.getElementById('btext');b.className='badge';
+      if(st==='online'){b.classList.add('online');t.textContent='🟢 雲端即時同步中（全班連線）';}
+      else if(st==='offline'){b.classList.add('offline');t.textContent='🔴 連線異常';}
+      else{t.textContent='⚡ 正在連接...';}
+    }
+
+    // Fetch
+    async function fetchOrders(){
+      try{const{data,error}=await db.from('orders').select('*').order('created_at',{ascending:false});if(error)throw error;orders=data||[];render();setStatus('online');}
+      catch(e){setStatus('offline');document.getElementById('ol').innerHTML='<div class="empty"><div class="ico">⚠️</div><div class="txt" style="color:#f43f5e">無法連接至 Supabase<br><small style="color:#475569">請確認 SUPABASE_URL 與 SUPABASE_ANON_KEY</small></div></div>';}
+    }
+
+    // Submit
+    async function sub(e){
+      e.preventDefault();
+      const name=document.getElementById('un').value.trim(),meal=document.getElementById('mn').value.trim(),price=Number(document.getElementById('mp').value)||0,note=document.getElementById('nt').value.trim();
+      if(!name||!meal){toast('⚠️','資料不完整','請填寫姓名與餐點名稱','danger');return;}
+      const btn=document.getElementById('sbtn'),bt=document.getElementById('btxt'),bi=document.getElementById('bico');
+      btn.disabled=true;bt.textContent='寫入雲端中...';bi.textContent='⏳';
+      try{const{error}=await db.from('orders').insert([{name,meal,price,note}]).select();if(error)throw error;
+        document.getElementById('mn').value='';document.getElementById('mp').value='';document.getElementById('nt').value='';document.getElementById('ms').value='';
+        toast('🎉','點餐成功！',`已為【${name}】送出「${meal}」`);chime('new');}
+      catch(err){toast('❌','送出失敗',err.message||'請檢查網路連線','danger');}
+      finally{btn.disabled=false;bt.textContent='確認送出訂單';bi.textContent='🚀';}
+    }
+
+    // Delete
+    async function del(id,name){
+      const ok=await showModal('取消點餐',`確定要取消【${name}】的這筆點餐嗎？`);if(!ok)return;
+      try{const{error}=await db.from('orders').delete().eq('id',id);if(error)throw error;}
+      catch(e){toast('❌','刪除失敗',e.message,'danger');}
+    }
+
+    // Realtime
+    function sub2(){
+      db.channel('public:orders').on('postgres_changes',{event:'*',schema:'public',table:'orders'},p=>{
+        if(p.eventType==='INSERT'){const o=p.new;if(!orders.find(x=>String(x.id)===String(o.id))){orders.push(o);render(o.id);chime('new');toast('📢',`${o.name} 剛點了餐！`,`${o.meal}（$${o.price||0}）`);}}
+        else if(p.eventType==='DELETE'){const di=p.old?.id,tg=orders.find(x=>String(x.id)===String(di));orders=orders.filter(x=>String(x.id)!==String(di));render();chime('delete');if(tg)toast('🗑️','取消點餐',`【${tg.name}】的點餐已取消`,'danger');}
+        else if(p.eventType==='UPDATE'){const u=p.new,i=orders.findIndex(x=>String(x.id)===String(u.id));if(i!==-1){orders[i]=u;render();}}
+      }).subscribe(s=>{if(s==='SUBSCRIBED')setStatus('online');else if(s==='CLOSED'||s==='CHANNEL_ERROR')setStatus('offline');});
+    }
+
+    // Responsive
+    function layout(){const g=document.getElementById('mg');if(window.innerWidth>=1024){g.style.display='grid';g.style.gridTemplateColumns='1fr 1.4fr';g.style.flexDirection='';}else{g.style.display='flex';g.style.flexDirection='column';g.style.gridTemplateColumns='';}}
+
+    window.addEventListener('DOMContentLoaded',()=>{fetchOrders();sub2();tick();setInterval(tick,1000);layout();window.addEventListener('resize',layout);});
+  </script>
+</body>
+</html>
